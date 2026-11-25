@@ -32,7 +32,11 @@ LOGIN_FAILURES = Counter(
 
 def create_app(database_path=None):
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "clave-insegura-solo-laboratorio")
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or os.urandom(32)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
     app.config["DATABASE_PATH"] = str(
         database_path or os.getenv("DATABASE_PATH", str(Path(__file__).with_name("securedev.db")))
     )
@@ -59,6 +63,10 @@ def create_app(database_path=None):
             endpoint = request.endpoint or "unknown"
             HTTP_REQUESTS.labels(endpoint, request.method, str(response.status_code)).inc()
             HTTP_DURATION.labels(endpoint).observe(time.perf_counter() - g.request_started_at)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'"
         return response
 
     with app.app_context():
@@ -142,7 +150,8 @@ def create_app(database_path=None):
         if not current_user():
             return redirect(url_for("login"))
         item = db().execute(
-            "SELECT id, owner_id, title, body FROM tickets WHERE id = ?", (ticket_id,)
+            "SELECT id, owner_id, title, body FROM tickets WHERE id = ? AND owner_id = ?",
+            (ticket_id, current_user()),
         ).fetchone()
         if item is None:
             abort(404)
@@ -155,7 +164,10 @@ def create_app(database_path=None):
     def add_comment(ticket_id):
         if not current_user():
             return redirect(url_for("login"))
-        if db().execute("SELECT id FROM tickets WHERE id = ?", (ticket_id,)).fetchone() is None:
+        if db().execute(
+            "SELECT id FROM tickets WHERE id = ? AND owner_id = ?",
+            (ticket_id, current_user()),
+        ).fetchone() is None:
             abort(404)
         body = request.form.get("body", "")
         db().execute(
@@ -170,8 +182,10 @@ def create_app(database_path=None):
         if not current_user():
             return redirect(url_for("login"))
         query = request.args.get("q", "")
-        sql = f"SELECT id, title FROM tickets WHERE title LIKE '%{query}%' ORDER BY id"
-        tickets = db().execute(sql).fetchall()
+        tickets = db().execute(
+            "SELECT id, title FROM tickets WHERE owner_id = ? AND title LIKE ? ORDER BY id",
+            (current_user(), f"%{query}%"),
+        ).fetchall()
         return render_template("search.html", tickets=tickets, query=query)
 
     @app.get("/health")
