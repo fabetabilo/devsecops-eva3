@@ -21,3 +21,30 @@ docker compose down
 ```
 
 Los datos quedan en un volumen Docker; `docker compose down -v` reinicia los datos de prueba. El código, la configuración y las credenciales son solo para un entorno de laboratorio local.
+
+## Levantar Jenkins
+
+Para CI/CD con Jenkins con construcción, pruebas y despliegue
+
+```
+python -m venv .venv
+```
+
+```
+docker pull jenkins/jenkins:2.541.3-lts-jdk17
+```
+
+```
+docker build -t jenkins-devsecops ./jenkins
+```
+
+```
+docker run -d --name jenkins -p 8080:8080 -v jenkins_home:/var/jenkins_home jenkins-devsecops
+```
+
+Obtener contraseña inicial
+```
+docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+Abrir http://localhost:8080 e ingresar la contraseña obtenida.
