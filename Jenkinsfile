@@ -17,10 +17,25 @@ pipeline {
             }
         }
 
+        stage('Security · OWASP ZAP') {
+            steps {
+                sh '''
+                    mkdir -p reports
+                    zap.sh -cmd -port 8899 -autorun "$WORKSPACE/zap.yaml"
+                '''
+            }
+        }
+
         stage('Deploy') {
             steps {
                 sh 'bash deploy.sh'
             }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
         }
     }
 }

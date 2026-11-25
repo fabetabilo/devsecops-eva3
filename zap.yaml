@@ -1,0 +1,78 @@
+# Plan de OWASP ZAP (Automation Framework): la prueba DAST como código.
+# Ejecuta un escaneo AUTENTICADO contra SecureDev Tickets.
+#
+# Target: la app publicada por docker compose. Ajusta la URL segun como corras ZAP:
+#   - ZAP en contenedor + app por compose (Windows/Docker Desktop): http://host.docker.internal:8600
+#   - ZAP con --network host (Linux):                               http://localhost:8600
+env:
+  contexts:
+    - name: securedev
+      urls:
+        - http://host.docker.internal:8600
+      includePaths:
+        - http://host.docker.internal:8600.*
+      excludePaths:
+        - http://host.docker.internal:8600/logout
+        - http://host.docker.internal:8600/metrics
+      authentication:
+        method: form
+        parameters:
+          loginPageUrl: http://host.docker.internal:8600/login
+          loginRequestUrl: http://host.docker.internal:8600/login
+          loginRequestBody: "username={%username%}&password={%password%}"
+        verification:
+          method: response
+          loggedInRegex: "Mis tickets|Salir"
+          loggedOutRegex: "Ingresar|Credenciales inv"
+      sessionManagement:
+        method: cookie
+      users:
+        - name: ana
+          credentials:
+            username: ana
+            password: ana123
+  parameters:
+    failOnError: true
+    progressToStdout: true
+
+jobs:
+  - type: alertFilter
+    alertFilters:
+      # 10106 "HTTP Only Site": el staging corre en HTTP local sin TLS.
+      # En produccion este hallazgo SI seria real; aqui no aplica.
+      - ruleId: 10106
+        newRisk: Info
+
+  - type: spider
+    parameters:
+      context: securedev
+      user: ana
+      maxDuration: 2
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: activeScan
+    parameters:
+      context: securedev
+      user: ana
+      maxRuleDurationInMins: 1
+      maxScanDurationInMins: 5
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: ${WORKSPACE}/reports
+      reportFile: zap-report
+
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: ${WORKSPACE}/reports
+      reportFile: zap-report
+
+  - type: exitStatus
+    parameters:
+      errorLevel: High
+      warnLevel: Medium
