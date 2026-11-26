@@ -1,0 +1,34 @@
+groups:
+  - name: securedev
+    rules:
+      - alert: ServicioCaido
+        expr: up{job="securedev"} == 0
+        for: 30s
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "SecureDev no responde al scraping de Prometheus"
+
+      - alert: PosibleFuerzaBruta
+        expr: increase(securedev_login_failures_total[1m]) > 10
+        for: 30s
+        labels:
+          severidad: alta
+        annotations:
+          resumen: "Más de 10 intentos de login fallidos en un minuto"
+
+      - alert: PosibleEnumeracionDeTickets
+        expr: sum(increase(securedev_http_requests_total{endpoint="ticket", status="404"}[1m])) > 10
+        for: 30s
+        labels:
+          severidad: alta
+        annotations:
+          resumen: "Muchos accesos a tickets inexistentes o ajenos (posible intento de IDOR)"
+
+      - alert: TasaDeErroresAlta
+        expr: sum(rate(securedev_http_requests_total{status=~"5.."}[1m])) > 0.1
+        for: 30s
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "La aplicación supera el umbral de errores 5xx"
